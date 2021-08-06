@@ -24,14 +24,14 @@
 #ifndef LIVOX_ROS_DRIVER_LDDC_H_
 #define LIVOX_ROS_DRIVER_LDDC_H_
 
-#include "lds.h"
-#include "livox_sdk.h"
-
-#include <ros/ros.h>
-#include <rosbag/bag.h>
-#include <pcl_ros/point_cloud.h>
 #include <livox_ros_driver/CustomMsg.h>
 #include <livox_ros_driver/CustomPoint.h>
+#include <pcl_ros/point_cloud.h>
+#include <ros/ros.h>
+#include <rosbag/bag.h>
+
+#include "lds.h"
+#include "livox_sdk.h"
 
 namespace livox_ros {
 
@@ -47,7 +47,7 @@ typedef enum {
 class Lddc {
  public:
   Lddc(int format, int multi_topic, int data_src, int output_type, double frq,
-      std::string &frame_id, bool lidar_bag, bool imu_bag);
+       std::string &frame_id, bool lidar_bag, bool imu_bag, int lidar_num);
   ~Lddc();
 
   int RegisterLds(Lds *lds);
@@ -81,12 +81,13 @@ class Lddc {
   ros::Publisher *GetCurrentImuPublisher(uint8_t handle);
   void PollingLidarPointCloudData(uint8_t handle, LidarDevice *lidar);
   void PollingLidarImuData(uint8_t handle, LidarDevice *lidar);
-  void InitPointcloud2MsgHeader(sensor_msgs::PointCloud2& cloud);
-  void FillPointsToPclMsg(PointCloud::Ptr& pcl_msg, \
-      LivoxPointXyzrtl* src_point, uint32_t num);
-  void FillPointsToCustomMsg(livox_ros_driver::CustomMsg& livox_msg, \
-      LivoxPointXyzrtl* src_point, uint32_t num, uint32_t offset_time, \
-      uint32_t point_interval, uint32_t echo_num);
+  void InitPointcloud2MsgHeader(sensor_msgs::PointCloud2 &cloud);
+  void FillPointsToPclMsg(PointCloud::Ptr &pcl_msg, LivoxPointXyzrtl *src_point,
+                          uint32_t num, uint8_t handle);
+  void FillPointsToCustomMsg(livox_ros_driver::CustomMsg &livox_msg,
+                             LivoxPointXyzrtl *src_point, uint32_t num,
+                             uint32_t offset_time, uint32_t point_interval,
+                             uint32_t echo_num);
   uint8_t transfer_format_;
   uint8_t use_multi_topic_;
   uint8_t data_src_;
@@ -103,6 +104,9 @@ class Lddc {
 
   ros::NodeHandle *cur_node_;
   rosbag::Bag *bag_;
+  int frame_count_;
+  int lidar_num_;
+  pcl::PointCloud<pcl::PointXYZI>::Ptr frame_cloud_;
 };
 
 }  // namespace livox_ros

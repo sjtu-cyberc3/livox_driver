@@ -2,7 +2,7 @@
 
 	<arg name="lvx_file_path" default="livox_test.lvx"/>
 	<arg name="bd_list" default="100000000000000"/>
-	<arg name="xfer_format" default="0"/>
+	<arg name="xfer_format" default="2"/>
 	<arg name="multi_topic" default="0"/>
 	<arg name="data_src" default="0"/>
 	<arg name="publish_freq" default="10.0"/>
@@ -13,7 +13,9 @@
 	<arg name="msg_frame_id" default="livox_frame"/>
 	<arg name="lidar_bag" default="true"/>
 	<arg name="imu_bag" default="true"/>
+	<arg name="lidar_num" default="3"/>
 
+	<param name="lidar_num" type="int" value="$(arg lidar_num)"/>
 	<param name="xfer_format" value="$(arg xfer_format)"/>
 	<param name="multi_topic" value="$(arg multi_topic)"/>
 	<param name="data_src" value="$(arg data_src)"/>

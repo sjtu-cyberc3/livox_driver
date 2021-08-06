@@ -24,11 +24,12 @@
 
 #include "include/livox_ros_driver.h"
 
-#include <chrono>
-#include <vector>
-#include <csignal>
-
 #include <ros/ros.h>
+
+#include <chrono>
+#include <csignal>
+#include <vector>
+
 #include "lddc.h"
 #include "lds_hub.h"
 #include "lds_lidar.h"
@@ -69,11 +70,12 @@ int main(int argc, char **argv) {
   int xfer_format = kPointCloud2Msg;
   int multi_topic = 0;
   int data_src = kSourceRawLidar;
-  double publish_freq  = 10.0; /* Hz */
-  int output_type      = kOutputToRos;
+  double publish_freq = 10.0; /* Hz */
+  int output_type = kOutputToRos;
   std::string frame_id = "livox_frame";
   bool lidar_bag = true;
-  bool imu_bag   = false;
+  bool imu_bag = false;
+  int lidar_num = 0;
 
   livox_node.getParam("xfer_format", xfer_format);
   livox_node.getParam("multi_topic", multi_topic);
@@ -83,6 +85,8 @@ int main(int argc, char **argv) {
   livox_node.getParam("frame_id", frame_id);
   livox_node.getParam("enable_lidar_bag", lidar_bag);
   livox_node.getParam("enable_imu_bag", imu_bag);
+  livox_node.getParam("lidar_num", lidar_num);
+
   if (publish_freq > 100.0) {
     publish_freq = 100.0;
   } else if (publish_freq < 0.1) {
@@ -93,7 +97,7 @@ int main(int argc, char **argv) {
 
   /** Lidar data distribute control and lidar data source set */
   Lddc *lddc = new Lddc(xfer_format, multi_topic, data_src, output_type,
-                        publish_freq, frame_id, lidar_bag, imu_bag);
+                        publish_freq, frame_id, lidar_bag, imu_bag, lidar_num);
   lddc->SetRosNode(&livox_node);
 
   int ret = 0;

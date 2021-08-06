@@ -76,10 +76,10 @@ Visualization Manager:
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
-      Size (Pixels): 2
+      Size (Pixels): 0.1
       Size (m): 0.004999999888241291
       Style: Points
-      Topic: /livox/lidar
+      Topic: /driver/livox/point_cloud
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
