@@ -1,7 +1,7 @@
 {
     "lidar_config": [
         {
-            "broadcast_code": "3GGDJ4V00100141",
+            "broadcast_code": "3GGDHCB00102161",
             "enable_connect": true,
             "return_mode": 0,
             "coordinate": 0,
@@ -10,7 +10,7 @@
             "enable_high_sensitivity": false
         },
         {
-            "broadcast_code": "3GGDJ4V00100441",
+            "broadcast_code": "3GGDJ3C00100351",
             "enable_connect": true,
             "return_mode": 0,
             "coordinate": 0,
@@ -19,7 +19,25 @@
             "enable_high_sensitivity": false
         },
         {
-            "broadcast_code": "3GGDJ4V00100501",
+            "broadcast_code": "3GGDJ3P00100151",
+            "enable_connect": true,
+            "return_mode": 0,
+            "coordinate": 0,
+            "imu_rate": 0,
+            "extrinsic_parameter_source": 1,
+            "enable_high_sensitivity": false
+        },
+        {
+            "broadcast_code": "3GGDJ3P00100341",
+            "enable_connect": true,
+            "return_mode": 0,
+            "coordinate": 0,
+            "imu_rate": 0,
+            "extrinsic_parameter_source": 1,
+            "enable_high_sensitivity": false
+        },
+        {
+            "broadcast_code": "3GGDJ3P00100571",
             "enable_connect": true,
             "return_mode": 0,
             "coordinate": 0,

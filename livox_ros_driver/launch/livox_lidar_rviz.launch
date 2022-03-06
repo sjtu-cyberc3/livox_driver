@@ -13,7 +13,7 @@
 	<arg name="msg_frame_id" default="livox_frame"/>
 	<arg name="lidar_bag" default="true"/>
 	<arg name="imu_bag" default="true"/>
-	<arg name="lidar_num" default="3"/>
+	<arg name="lidar_num" default="5"/>
 
 	<param name="xfer_format" value="$(arg xfer_format)"/>
 	<param name="multi_topic" value="$(arg multi_topic)"/>
