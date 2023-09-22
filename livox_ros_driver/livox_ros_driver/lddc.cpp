@@ -66,6 +66,7 @@ Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
   frame_cloud_->header.frame_id.assign(frame_id_);
   frame_cloud_->height = 1;
   frame_cloud_->width = 0;
+  frame_data_from_.clear();
 };
 
 Lddc::~Lddc() {
@@ -348,6 +349,47 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
 
   ros::Publisher *p_publisher = Lddc::GetCurrentPublisher(handle);
   if (kOutputToRos == output_type_) {
+
+    livox_ros_driver::LidarStatus lidar_status;
+    lidar_status.status = true;
+    if (frame_data_from_[handle]) {
+      pcl_conversions::toPCL(ros::Time::now(), frame_cloud_->header.stamp);
+      if (int(frame_data_from_.size()) != lidar_num_) {
+        lidar_status.status = false;
+        lidar_status.error_code = "lidar number is invalid";
+      }
+      for (auto &iter : frame_data_from_) {
+        if (!iter.second) {
+          lidar_status.status = false;
+          lidar_status.error_code += ("lidar " + std::to_string(iter.first) + " is no data");
+        }
+      }
+      lidar_status_publisher_.publish(lidar_status);
+      p_publisher->publish(frame_cloud_);
+      frame_cloud_->clear();
+      frame_count_ = 0;
+      for (auto &iter : frame_data_from_)
+        iter.second = false;
+    }
+    frame_data_from_[handle] = true;
+    frame_cloud_->insert(frame_cloud_->end(), cloud->begin(), cloud->end());
+
+    if (int(frame_data_from_.size()) == lidar_num_) {
+      bool cloud_full = true;
+      for (auto &iter : frame_data_from_)
+        cloud_full &= iter.second;
+      if (cloud_full) {
+        pcl_conversions::toPCL(ros::Time::now(), frame_cloud_->header.stamp);
+        lidar_status_publisher_.publish(lidar_status);
+        p_publisher->publish(frame_cloud_);
+        frame_cloud_->clear();
+        frame_count_ = 0;
+        for (auto &iter : frame_data_from_)
+          iter.second = false;
+      }
+    }
+
+/*
     // p_publisher->publish(cloud);
     frame_cloud_->insert(frame_cloud_->end(), cloud->begin(), cloud->end());
     frame_count_++;
@@ -359,6 +401,7 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
       frame_cloud_->clear();
       frame_count_ = 0;
     }
+*/
   } else {
     if (bag_ && enable_lidar_bag_) {
       bag_->write(p_publisher->getTopic(), ros::Time(timestamp / 1000000000.0),
@@ -585,11 +628,23 @@ void Lddc::PollingLidarImuData(uint8_t handle, LidarDevice *lidar) {
   }
 }
 
+void Lddc::RegisterLidarStatus(void) {
+  if (frame_data_from_.empty()) {
+    for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
+      LidarDevice *lidar = &lds_->lidars_[i];
+      if (kConnectStateSampling == lidar->connect_state) {
+        frame_data_from_[i] = false;
+      }
+    }
+  }
+}
+
 void Lddc::DistributeLidarData(void) {
   if (lds_ == nullptr) {
     return;
   }
   lds_->semaphore_.Wait();
+  RegisterLidarStatus();
   for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
     uint32_t lidar_id = i;
     LidarDevice *lidar = &lds_->lidars_[lidar_id];
