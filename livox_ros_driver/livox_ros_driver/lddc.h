@@ -30,6 +30,7 @@
 #include <ros/ros.h>
 #include <rosbag/bag.h>
 
+#include "livox_ros_driver/LidarStatus.h"
 #include "lds.h"
 #include "livox_sdk.h"
 
@@ -57,7 +58,10 @@ class Lddc {
 
   uint8_t GetTransferFormat(void) { return transfer_format_; }
   uint8_t IsMultiTopic(void) { return use_multi_topic_; }
-  void SetRosNode(ros::NodeHandle *node) { cur_node_ = node; }
+  void SetRosNode(ros::NodeHandle *node) {
+    cur_node_ = node;
+    lidar_status_publisher_ = node->advertise<livox_ros_driver::LidarStatus>("/lidar_status", 2);
+  }
 
   void SetRosPub(ros::Publisher *pub) { global_pub_ = pub; };
   void SetPublishFrq(uint32_t frq) { publish_frq_ = frq; }
@@ -76,6 +80,8 @@ class Lddc {
                                    uint8_t handle);
   uint32_t PublishImuData(LidarDataQueue *queue, uint32_t packet_num,
                           uint8_t handle);
+
+  void RegisterLidarStatus(void);
 
   ros::Publisher *GetCurrentPublisher(uint8_t handle);
   ros::Publisher *GetCurrentImuPublisher(uint8_t handle);
@@ -107,6 +113,9 @@ class Lddc {
   int frame_count_;
   int lidar_num_;
   pcl::PointCloud<pcl::PointXYZI>::Ptr frame_cloud_;
+
+  std::map<uint8_t, bool> frame_data_from_;
+  ros::Publisher lidar_status_publisher_;
 };
 
 }  // namespace livox_ros

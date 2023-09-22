@@ -24,6 +24,7 @@
 
 #include "lddc.h"
 
+#include <chrono>
 #include <inttypes.h>
 #include <livox_ros_driver/CustomMsg.h>
 #include <livox_ros_driver/CustomPoint.h>
@@ -33,7 +34,9 @@
 #include <rosbag/bag.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <set>
 #include <stdint.h>
+#include <unordered_map>
 
 #include "lds_lidar.h"
 #include "lds_lvx.h"
@@ -44,15 +47,10 @@ namespace livox_ros {
 Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
            double frq, std::string &frame_id, bool lidar_bag, bool imu_bag,
            int lidar_num)
-    : transfer_format_(format),
-      use_multi_topic_(multi_topic),
-      data_src_(data_src),
-      output_type_(output_type),
-      publish_frq_(frq),
-      frame_id_(frame_id),
-      enable_lidar_bag_(lidar_bag),
-      enable_imu_bag_(imu_bag),
-      frame_cloud_(new PointCloud),
+    : transfer_format_(format), use_multi_topic_(multi_topic),
+      data_src_(data_src), output_type_(output_type), publish_frq_(frq),
+      frame_id_(frame_id), enable_lidar_bag_(lidar_bag),
+      enable_imu_bag_(imu_bag), frame_cloud_(new PointCloud),
       lidar_num_(lidar_num) {
   publish_period_ns_ = kNsPerSecond / publish_frq_;
   lds_ = nullptr;
@@ -66,6 +64,7 @@ Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
   frame_cloud_->header.frame_id.assign(frame_id_);
   frame_cloud_->height = 1;
   frame_cloud_->width = 0;
+  frame_data_from_.clear();
 };
 
 Lddc::~Lddc() {
@@ -314,7 +313,7 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
       }
     }
     if (!published_packet) {
-      cloud->header.stamp = timestamp / 1000.0;  // to pcl ros time stamp
+      cloud->header.stamp = timestamp / 1000.0; // to pcl ros time stamp
     }
     uint32_t single_point_num = storage_packet.point_num * echo_num;
 
@@ -348,16 +347,69 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
 
   ros::Publisher *p_publisher = Lddc::GetCurrentPublisher(handle);
   if (kOutputToRos == output_type_) {
-    // p_publisher->publish(cloud);
-    frame_cloud_->insert(frame_cloud_->end(), cloud->begin(), cloud->end());
-    frame_count_++;
-    if (frame_count_ == lidar_num_) {
-      // frame_cloud_->header.stamp = cloud->header.stamp;
-      pcl_conversions::toPCL(ros::Time::now(), frame_cloud_->header.stamp);
+    livox_ros_driver::LidarStatus lidar_status;
+    lidar_status.status = true;
 
-      p_publisher->publish(frame_cloud_);
-      frame_cloud_->clear();
-      frame_count_ = 0;
+    static std::unordered_map<uint8_t, PointCloud::Ptr> cloud_cache;
+    static std::unordered_map<uint8_t, uint64_t> timestamp_cache;
+    static std::set<uint8_t> lidars_with_data; // default from 0
+
+    auto all_lidars_data_ready = [&]() -> bool {
+      using namespace std::chrono;
+
+      static auto last_check_time = high_resolution_clock::now();
+      auto current_time = high_resolution_clock::now();
+      auto time_diff = duration_cast<seconds>(current_time - last_check_time);
+
+      if (lidars_with_data.size() != lidar_num_) {
+        if (time_diff.count() > 1) {
+          printf("Connected lidar count does not match the configured lidar "
+                 "count.\n");
+          lidar_status.status = false;
+          lidar_status.error_code = "lidar number is invalid";
+          lidar_status_publisher_.publish(lidar_status);
+        }
+        return false;
+      }
+      for (uint32_t i = 0; i < lidar_num_; i++) {
+        if (lidars_with_data.count(i) == 0) {
+          if (time_diff.count() > 1) {
+            lidar_status.status = false;
+            lidar_status.error_code +=
+                ("Lidar " + std::to_string(i) + " is no data");
+            printf("Lidar %d did not receive data.\n", i);
+            lidar_status_publisher_.publish(lidar_status);
+          }
+          return false;
+        }
+      }
+
+      last_check_time = current_time;
+      return true;
+    };
+
+    cloud_cache[handle] = cloud;
+    timestamp_cache[handle] = timestamp;
+    lidars_with_data.insert(handle);
+
+    if (all_lidars_data_ready()) {
+      PointCloud::Ptr merged_cloud(new PointCloud());
+      pcl_conversions::toPCL(ros::Time::now(), merged_cloud->header.stamp);
+      merged_cloud->header.frame_id.assign(frame_id_);
+      for (const auto &item : cloud_cache) {
+        auto cloud_temp = item.second;
+        merged_cloud->points.insert(merged_cloud->points.end(),
+                                    cloud_temp->points.begin(),
+                                    cloud_temp->points.end());
+      }
+      merged_cloud->height = 1;
+      merged_cloud->width = merged_cloud->points.size();
+      lidar_status_publisher_.publish(lidar_status);
+      p_publisher->publish(merged_cloud);
+
+      cloud_cache.clear();
+      timestamp_cache.clear();
+      lidars_with_data.clear();
     }
   } else {
     if (bag_ && enable_lidar_bag_) {
@@ -513,7 +565,7 @@ uint32_t Lddc::PublishImuData(LidarDataQueue *queue, uint32_t packet_num,
   timestamp = GetStoragePacketTimestamp(&storage_packet, data_source);
   if (timestamp >= 0) {
     imu_data.header.stamp =
-        ros::Time(timestamp / 1000000000.0);  // to ros time stamp
+        ros::Time(timestamp / 1000000000.0); // to ros time stamp
   }
 
   uint8_t point_buf[2048];
@@ -585,11 +637,23 @@ void Lddc::PollingLidarImuData(uint8_t handle, LidarDevice *lidar) {
   }
 }
 
+void Lddc::RegisterLidarStatus(void) {
+  if (frame_data_from_.empty()) {
+    for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
+      LidarDevice *lidar = &lds_->lidars_[i];
+      if (kConnectStateSampling == lidar->connect_state) {
+        frame_data_from_[i] = false;
+      }
+    }
+  }
+}
+
 void Lddc::DistributeLidarData(void) {
   if (lds_ == nullptr) {
     return;
   }
   lds_->semaphore_.Wait();
+  RegisterLidarStatus();
   for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
     uint32_t lidar_id = i;
     LidarDevice *lidar = &lds_->lidars_[lidar_id];
@@ -613,10 +677,10 @@ ros::Publisher *Lddc::GetCurrentPublisher(uint8_t handle) {
 
   if (use_multi_topic_) {
     pub = &private_pub_[handle];
-    queue_size = queue_size * 2;  // queue size is 64 for only one lidar
+    queue_size = queue_size * 2; // queue size is 64 for only one lidar
   } else {
     pub = &global_pub_;
-    queue_size = queue_size * 8;  // shared queue size is 256, for all lidars
+    queue_size = queue_size * 8; // shared queue size is 256, for all lidars
   }
 
   if (*pub == nullptr) {
@@ -646,10 +710,9 @@ ros::Publisher *Lddc::GetCurrentPublisher(uint8_t handle) {
           name_str, queue_size);
     } else if (kPclPxyziMsg == transfer_format_) {
       **pub = cur_node_->advertise<PointCloud>(name_str, queue_size);
-      ROS_INFO(
-          "%s publish use pcl PointXYZI format, set ROS publisher queue "
-          "size %d",
-          name_str, queue_size);
+      ROS_INFO("%s publish use pcl PointXYZI format, set ROS publisher queue "
+               "size %d",
+               name_str, queue_size);
     }
   }
 
@@ -662,10 +725,10 @@ ros::Publisher *Lddc::GetCurrentImuPublisher(uint8_t handle) {
 
   if (use_multi_topic_) {
     pub = &private_imu_pub_[handle];
-    queue_size = queue_size * 2;  // queue size is 64 for only one lidar
+    queue_size = queue_size * 2; // queue size is 64 for only one lidar
   } else {
     pub = &global_imu_pub_;
-    queue_size = queue_size * 8;  // shared queue size is 256, for all lidars
+    queue_size = queue_size * 8; // shared queue size is 256, for all lidars
   }
 
   if (*pub == nullptr) {
@@ -710,4 +773,4 @@ void Lddc::PrepareExit(void) {
   }
 }
 
-}  // namespace livox_ros
+} // namespace livox_ros

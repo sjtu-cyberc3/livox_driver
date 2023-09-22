@@ -48,6 +48,7 @@ inline void SignalHandler(int signum) {
 
 int main(int argc, char **argv) {
   /** Ros related */
+  std::cout << "Livox_ros_driver module version: 1.2.0 2023.09.22" << std::endl;
   if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,
                                      ros::console::levels::Debug)) {
     ros::console::notifyLoggerLevelsChanged();

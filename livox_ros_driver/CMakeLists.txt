@@ -39,6 +39,7 @@ find_package(PCL REQUIRED)
 add_message_files(FILES
 	CustomPoint.msg
 	CustomMsg.msg
+	LidarStatus.msg
 #   Message2.msg
 	)
 
